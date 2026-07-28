@@ -1,0 +1,44 @@
+# Node
+node_modules/
+npm-debug.log
+
+# Environment
+.env
+
+# VSCode
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Fabric generated artifacts
+channel-artifacts/
+crypto-config/
+
+# Vendored Go dependencies
+chaincode/lc-chaincode/vendor/
+
+# Wallets
+wallet/
+backend/wallet/
+
+# Build
+dist/
+build/
+
+# Docker
+*.tar
+
+# IDE
+.idea/
+
+# Coverage
+coverage/
+
+# Temporary
+tmp/

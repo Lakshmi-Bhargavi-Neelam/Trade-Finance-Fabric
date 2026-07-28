@@ -1,0 +1,40 @@
+# crypto-config.yaml
+#
+# Consumed by `cryptogen` to generate MSP material (certs/keys) for the
+# orderer organization and the three participant organizations.
+# One peer per org, as specified in the project scope.
+
+OrdererOrgs:
+  - Name: Orderer
+    Domain: tradefinance.com
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: orderer
+
+PeerOrgs:
+  # Importer's Bank
+  - Name: ImporterBankOrg
+    Domain: importerbank.tradefinance.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+    Users:
+      Count: 1
+
+  # Exporter's Bank
+  - Name: ExporterBankOrg
+    Domain: exporterbank.tradefinance.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+    Users:
+      Count: 1
+
+  # Customs Authority
+  - Name: CustomsOrg
+    Domain: customs.tradefinance.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+    Users:
+      Count: 1

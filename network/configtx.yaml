@@ -1,0 +1,186 @@
+# configtx.yaml
+#
+# Used by `configtxgen` to produce the orderer genesis block and the
+# channel creation transaction for the "tradefinancechannel" channel.
+
+Organizations:
+  - &OrdererOrg
+    Name: OrdererOrg
+    ID: OrdererMSP
+    MSPDir: ../crypto-config/ordererOrganizations/tradefinance.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+
+  - &ImporterBankOrg
+    Name: ImporterBankOrgMSP
+    ID: ImporterBankOrgMSP
+    MSPDir: ../crypto-config/peerOrganizations/importerbank.tradefinance.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('ImporterBankOrgMSP.admin', 'ImporterBankOrgMSP.peer', 'ImporterBankOrgMSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('ImporterBankOrgMSP.admin', 'ImporterBankOrgMSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('ImporterBankOrgMSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('ImporterBankOrgMSP.peer')"
+    AnchorPeers:
+      - Host: peer0.importerbank.tradefinance.com
+        Port: 7051
+
+  - &ExporterBankOrg
+    Name: ExporterBankOrgMSP
+    ID: ExporterBankOrgMSP
+    MSPDir: ../crypto-config/peerOrganizations/exporterbank.tradefinance.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('ExporterBankOrgMSP.admin', 'ExporterBankOrgMSP.peer', 'ExporterBankOrgMSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('ExporterBankOrgMSP.admin', 'ExporterBankOrgMSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('ExporterBankOrgMSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('ExporterBankOrgMSP.peer')"
+    AnchorPeers:
+      - Host: peer0.exporterbank.tradefinance.com
+        Port: 9051
+
+  - &CustomsOrg
+    Name: CustomsOrgMSP
+    ID: CustomsOrgMSP
+    MSPDir: ../crypto-config/peerOrganizations/customs.tradefinance.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('CustomsOrgMSP.admin', 'CustomsOrgMSP.peer', 'CustomsOrgMSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('CustomsOrgMSP.admin', 'CustomsOrgMSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('CustomsOrgMSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('CustomsOrgMSP.peer')"
+    AnchorPeers:
+      - Host: peer0.customs.tradefinance.com
+        Port: 11051
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_0: true
+
+Application: &ApplicationDefaults
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    LifecycleEndorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+    Endorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+  Capabilities:
+    <<: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+  OrdererType: etcdraft
+  Addresses:
+    - orderer.tradefinance.com:7050
+  EtcdRaft:
+    Consenters:
+      - Host: orderer.tradefinance.com
+        Port: 7050
+        ClientTLSCert: ../crypto-config/ordererOrganizations/tradefinance.com/orderers/orderer.tradefinance.com/tls/server.crt
+        ServerTLSCert: ../crypto-config/ordererOrganizations/tradefinance.com/orderers/orderer.tradefinance.com/tls/server.crt
+  BatchTimeout: 2s
+  BatchSize:
+    MaxMessageCount: 10
+    AbsoluteMaxBytes: 99 MB
+    PreferredMaxBytes: 512 KB
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+  Capabilities:
+    <<: *ChannelCapabilities
+
+Profiles:
+  # Genesis block profile for the ordering system channel.
+  TradeFinanceOrdererGenesis:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+      Organizations:
+        - *OrdererOrg
+      Capabilities:
+        <<: *OrdererCapabilities
+    Consortiums:
+      TradeFinanceConsortium:
+        Organizations:
+          - *ImporterBankOrg
+          - *ExporterBankOrg
+          - *CustomsOrg
+
+  # Application channel profile used to create tradefinancechannel.
+  TradeFinanceChannel:
+    Consortium: TradeFinanceConsortium
+    <<: *ChannelDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *ImporterBankOrg
+        - *ExporterBankOrg
+        - *CustomsOrg
+      Capabilities:
+        <<: *ApplicationCapabilities

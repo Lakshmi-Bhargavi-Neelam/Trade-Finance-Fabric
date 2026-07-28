@@ -1,0 +1,264 @@
+version: "3.7"
+
+networks:
+  tradefinance:
+    name: tradefinance
+
+volumes:
+  orderer.tradefinance.com:
+  peer0.importerbank.tradefinance.com:
+  peer0.exporterbank.tradefinance.com:
+  peer0.customs.tradefinance.com:
+  ipfs-data:
+
+services:
+
+  # ------------------------------------------------------------------
+  # Orderer
+  # ------------------------------------------------------------------
+  orderer.tradefinance.com:
+    container_name: orderer.tradefinance.com
+    image: hyperledger/fabric-orderer:2.5
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=7050
+      - ORDERER_GENERAL_GENESISMETHOD=file
+      - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+      - ORDERER_GENERAL_TLS_ENABLED=true
+      - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_ADMIN_TLS_ENABLED=true
+      - ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_ADMIN_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_ADMIN_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_ADMIN_TLS_CLIENTROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:7053
+    working_dir: /root
+    command: orderer
+    volumes:
+      - ../channel-artifacts/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+      - ../crypto-config/ordererOrganizations/tradefinance.com/orderers/orderer.tradefinance.com/msp:/var/hyperledger/orderer/msp
+      - ../crypto-config/ordererOrganizations/tradefinance.com/orderers/orderer.tradefinance.com/tls:/var/hyperledger/orderer/tls
+      - orderer.tradefinance.com:/var/hyperledger/production/orderer
+    ports:
+      - 7050:7050
+      - 7053:7053
+    networks:
+      - tradefinance
+
+  # ------------------------------------------------------------------
+  # Importer's Bank peer + CouchDB
+  # ------------------------------------------------------------------
+  couchdb.importerbank:
+    container_name: couchdb.importerbank
+    image: couchdb:3.3
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - 5984:5984
+    networks:
+      - tradefinance
+
+  peer0.importerbank.tradefinance.com:
+    container_name: peer0.importerbank.tradefinance.com
+    image: hyperledger/fabric-peer:2.5
+    environment:
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=tradefinance
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=false
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      - CORE_PEER_ID=peer0.importerbank.tradefinance.com
+      - CORE_PEER_ADDRESS=peer0.importerbank.tradefinance.com:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+      - CORE_PEER_CHAINCODEADDRESS=peer0.importerbank.tradefinance.com:7052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.importerbank.tradefinance.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.importerbank.tradefinance.com:7051
+      - CORE_PEER_LOCALMSPID=ImporterBankOrgMSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb.importerbank:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /root
+    command: peer node start
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - ../crypto-config/peerOrganizations/importerbank.tradefinance.com/peers/peer0.importerbank.tradefinance.com/msp:/etc/hyperledger/fabric/msp
+      - ../crypto-config/peerOrganizations/importerbank.tradefinance.com/peers/peer0.importerbank.tradefinance.com/tls:/etc/hyperledger/fabric/tls
+      - peer0.importerbank.tradefinance.com:/var/hyperledger/production
+    ports:
+      - 7051:7051
+    depends_on:
+      - couchdb.importerbank
+      - orderer.tradefinance.com
+    networks:
+      - tradefinance
+
+  # ------------------------------------------------------------------
+  # Exporter's Bank peer + CouchDB
+  # ------------------------------------------------------------------
+  couchdb.exporterbank:
+    container_name: couchdb.exporterbank
+    image: couchdb:3.3
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - 7984:5984
+    networks:
+      - tradefinance
+
+  peer0.exporterbank.tradefinance.com:
+    container_name: peer0.exporterbank.tradefinance.com
+    image: hyperledger/fabric-peer:2.5
+    environment:
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=tradefinance
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=false
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      - CORE_PEER_ID=peer0.exporterbank.tradefinance.com
+      - CORE_PEER_ADDRESS=peer0.exporterbank.tradefinance.com:9051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:9051
+      - CORE_PEER_CHAINCODEADDRESS=peer0.exporterbank.tradefinance.com:9052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:9052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.exporterbank.tradefinance.com:9051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.exporterbank.tradefinance.com:9051
+      - CORE_PEER_LOCALMSPID=ExporterBankOrgMSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb.exporterbank:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /root
+    command: peer node start
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - ../crypto-config/peerOrganizations/exporterbank.tradefinance.com/peers/peer0.exporterbank.tradefinance.com/msp:/etc/hyperledger/fabric/msp
+      - ../crypto-config/peerOrganizations/exporterbank.tradefinance.com/peers/peer0.exporterbank.tradefinance.com/tls:/etc/hyperledger/fabric/tls
+      - peer0.exporterbank.tradefinance.com:/var/hyperledger/production
+    ports:
+      - 9051:9051
+    depends_on:
+      - couchdb.exporterbank
+      - orderer.tradefinance.com
+    networks:
+      - tradefinance
+
+  # ------------------------------------------------------------------
+  # Customs Authority peer + CouchDB
+  # ------------------------------------------------------------------
+  couchdb.customs:
+    container_name: couchdb.customs
+    image: couchdb:3.3
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - 9984:5984
+    networks:
+      - tradefinance
+
+  peer0.customs.tradefinance.com:
+    container_name: peer0.customs.tradefinance.com
+    image: hyperledger/fabric-peer:2.5
+    environment:
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=tradefinance
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=false
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      - CORE_PEER_ID=peer0.customs.tradefinance.com
+      - CORE_PEER_ADDRESS=peer0.customs.tradefinance.com:11051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:11051
+      - CORE_PEER_CHAINCODEADDRESS=peer0.customs.tradefinance.com:11052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:11052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.customs.tradefinance.com:11051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.customs.tradefinance.com:11051
+      - CORE_PEER_LOCALMSPID=CustomsOrgMSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb.customs:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /root
+    command: peer node start
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - ../crypto-config/peerOrganizations/customs.tradefinance.com/peers/peer0.customs.tradefinance.com/msp:/etc/hyperledger/fabric/msp
+      - ../crypto-config/peerOrganizations/customs.tradefinance.com/peers/peer0.customs.tradefinance.com/tls:/etc/hyperledger/fabric/tls
+      - peer0.customs.tradefinance.com:/var/hyperledger/production
+    ports:
+      - 11051:11051
+    depends_on:
+      - couchdb.customs
+      - orderer.tradefinance.com
+    networks:
+      - tradefinance
+
+  # ------------------------------------------------------------------
+  # CLI - convenience container with the peer binary + all crypto
+  # material mounted, used by the scripts to create the channel, join
+  # peers, and deploy chaincode.
+  # ------------------------------------------------------------------
+  # ------------------------------------------------------------------
+  # IPFS (Kubo) — document storage for Phase 2 backend
+  # API: localhost:5001   Gateway: localhost:8080
+  # ------------------------------------------------------------------
+  ipfs:
+    container_name: ipfs
+    image: ipfs/kubo:v0.32.1
+    environment:
+      - IPFS_PROFILE=server
+    ports:
+      - 4001:4001
+      - 5001:5001
+      - 8080:8080
+    volumes:
+      - ipfs-data:/data/ipfs
+    networks:
+      - tradefinance
+
+  cli:
+    container_name: cli
+    image: hyperledger/fabric-tools:2.5
+    tty: true
+    stdin_open: true
+    environment:
+      - GOPATH=/opt/gopath
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_LOCALMSPID=ImporterBankOrgMSP
+      - CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/importerbank.tradefinance.com/peers/peer0.importerbank.tradefinance.com/tls/ca.crt
+      - CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/importerbank.tradefinance.com/users/Admin@importerbank.tradefinance.com/msp
+      - CORE_PEER_ADDRESS=peer0.importerbank.tradefinance.com:7051
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
+    command: /bin/bash
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - ../chaincode:/opt/gopath/src/github.com/chaincode
+      - ../crypto-config:/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto
+      - ../channel-artifacts:/opt/gopath/src/github.com/hyperledger/fabric/peer/channel-artifacts
+    depends_on:
+      - orderer.tradefinance.com
+      - peer0.importerbank.tradefinance.com
+      - peer0.exporterbank.tradefinance.com
+      - peer0.customs.tradefinance.com
+    networks:
+      - tradefinance
