@@ -1,157 +1,382 @@
-# Trade Finance / Letter of Credit Platform (MVP)
+# Trade Finance Fabric
 
-An educational Hyperledger Fabric project demonstrating a multi-org
-enterprise blockchain workflow for Letters of Credit (LC), with document
-integrity backed by IPFS.
+A permissioned blockchain-based trade finance platform built using **Hyperledger Fabric**, **Go Chaincode**, **Express.js**, **React**, and **IPFS** to improve transparency, traceability, and document management in cross-border trade transactions.
 
-This is **not** a production banking system. Scope is deliberately
-minimal — see `docs/SCOPE.md`.
+---
 
-## Status
+# Overview
 
-- [x] **Phase 1 — Fabric network + chaincode**
-- [x] **Phase 2 — Backend APIs + IPFS integration**
-- [ ] Phase 3 — React frontend
+International trade involves multiple organizations such as importers, exporters, banks, and customs authorities. Since these organizations do not fully trust each other, they rely on a **Letter of Credit (LC)** issued by the importer's bank to guarantee payment.
 
-Phase 3 will be built after Phase 2 is confirmed working end-to-end
-on your machine — per the incremental development approach in the spec.
+In the traditional process, shipment documents are exchanged between multiple parties through centralized systems, emails, or paper documents. This often leads to:
 
-## Architecture (Phase 1 + 2)
+- Lack of transparency
+- Difficulty tracking document status
+- Limited auditability
+- Risk of document tampering
+- Slow approval workflows
 
-Three organizations, one peer each, one Raft orderer, one channel, plus IPFS:
+This project demonstrates how a **permissioned blockchain** can improve visibility and trust while maintaining a shared, immutable record of every trade transaction.
 
-| Organization | MSP ID | Peer | CouchDB |
-|---|---|---|---|
-| Importer's Bank | `ImporterBankOrgMSP` | peer0.importerbank.tradefinance.com:7051 | localhost:5984 |
-| Exporter's Bank | `ExporterBankOrgMSP` | peer0.exporterbank.tradefinance.com:9051 | localhost:7984 |
-| Customs Authority | `CustomsOrgMSP` | peer0.customs.tradefinance.com:11051 | localhost:9984 |
+---
 
-Channel: `tradefinancechannel`
-Chaincode: `lccc` (Go, in `chaincode/lc-chaincode`)
-IPFS: Kubo node on `localhost:5001` (API) / `8080` (gateway)
-Backend API: Express on `localhost:3001` (see `backend/README.md`)
+# Problem Statement
 
-## Repository layout
+Cross-border trade requires coordination between multiple independent organizations:
+
+- Importer Company
+- Exporter Company
+- Importer's Bank
+- Exporter's Bank
+- Customs Authority
+
+Each participant maintains its own records, making it difficult to ensure everyone is working with the same information.
+
+Document verification is also time-consuming because every participant must verify documents independently before approving the next stage of the trade process.
+
+---
+
+# Our Approach
+
+This project digitizes the Letter of Credit workflow using Hyperledger Fabric.
+
+Instead of maintaining separate records across organizations, every participant accesses a shared permissioned ledger where the latest state of the trade is visible.
+
+Large shipment documents are stored in **IPFS**, while only their metadata (CID, file hash, timestamps, uploader information) is stored on the blockchain.
+
+Business rules such as:
+
+- LC creation
+- Document upload
+- Customs approval
+- Bank approval
+- Automatic payment release
+
+are implemented inside Hyperledger Fabric chaincode.
+
+---
+
+# Technology Stack
+
+## Frontend
+
+- React
+- TypeScript
+- TanStack Router
+- TanStack Query
+- Tailwind CSS
+
+## Backend
+
+- Node.js
+- Express.js
+- Hyperledger Fabric Gateway SDK
+- Multer
+- IPFS HTTP Client
+
+## Blockchain
+
+- Hyperledger Fabric
+- Go Chaincode
+- CouchDB World State
+
+## Distributed Storage
+
+- IPFS
+
+---
+
+# System Architecture
 
 ```
-trade-finance-fabric/
-├── network/                 # Fabric network config + docker-compose + scripts
-│   ├── crypto-config.yaml
-│   ├── configtx.yaml
-│   ├── docker-compose.yaml
-│   └── scripts/
-│       ├── generate.sh      # cryptogen + configtxgen
-│       ├── start.sh         # docker-compose up
-│       ├── createChannel.sh # create channel + join all 3 peers
-│       ├── deployChaincode.sh
-│       ├── testWorkflow.sh  # exercises the full LC lifecycle via peer CLI
-│       └── stop.sh
-├── chaincode/
-│   └── lc-chaincode/        # Go chaincode implementing the LC contract
-├── backend/                 # Phase 2 — Express API + Fabric Gateway + IPFS
-│   └── README.md            # How to run Phase 2
-├── frontend/                # (Phase 3)
-└── docs/
-    └── SCOPE.md
+                    React Frontend
+                           │
+                           │ REST APIs
+                           ▼
+                  Express.js Backend
+                           │
+        ┌──────────────────┴──────────────────┐
+        │                                     │
+        ▼                                     ▼
+ Hyperledger Fabric Gateway              IPFS Node
+        │
+        ▼
+ Hyperledger Fabric Network
+        │
+        ▼
+      Chaincode
+        │
+        ├────────► World State (Latest Asset State)
+        │
+        └────────► Blockchain Ledger (Complete Transaction History)
 ```
 
-## Prerequisites
+---
 
-You'll need these installed on your own machine (they are **not**
-available in the environment this repo was drafted in, so none of the
-network/chaincode-deployment steps below have been executed for you —
-only the Go syntax and YAML configs have been validated):
+# Workflow
 
-- Docker + Docker Compose
-- Go 1.20+
-- Node.js 18+ (Phase 2 backend)
-- Hyperledger Fabric binaries and Docker images (`cryptogen`,
-  `configtxgen`, `peer`), obtained via Fabric's bootstrap script:
-  ```
-  curl -sSL https://raw.githubusercontent.com/hyperledger/fabric/main/scripts/bootstrap.sh | bash -s -- 2.5.4 1.5.7
-  ```
-  Add the resulting `bin/` folder to your `PATH`.
+## 1. Create Letter of Credit
 
-## How to run Phase 1
+The Bank Officer creates a new Letter of Credit containing:
 
-```bash
-cd network
+- Importer
+- Exporter
+- Importer's Bank
+- Exporter's Bank
+- Commodity
+- Quantity
+- Amount
+- Currency
+- Expiry Date
 
-# 1. Generate crypto material + channel artifacts
-./scripts/generate.sh
+The backend invokes the chaincode's `CreateLC()` function, which stores the asset in the blockchain.
 
-# 2. Start the network (orderer, 3 peers, 3 CouchDB, cli)
-./scripts/start.sh
+Status:
 
-# 3. Create the channel and join all three peers
-./scripts/createChannel.sh
-
-# 4. Package, install, approve, and commit the chaincode
-#    (this also runs `go mod vendor` inside the CLI container, which
-#    needs normal internet access to resolve fabric-contract-api-go)
-./scripts/deployChaincode.sh
-
-# 5. Exercise the full LC lifecycle end-to-end
-./scripts/testWorkflow.sh
+```
+CREATED
 ```
 
-`testWorkflow.sh` creates an LC, uploads both documents, approves it via
-customs and the bank, and confirms the LC automatically flips to
-`PAYMENT_RELEASED`. If that script runs clean, Phase 1 is done and we
-move to Phase 2.
+---
 
-To tear everything down: `./scripts/stop.sh`
+## 2. Upload Shipment Documents
 
-## How to run Phase 2
+The Exporter uploads:
 
-After Phase 1 (`testWorkflow.sh`) passes:
+- Commercial Invoice
+- Bill of Lading
 
-1. Add docker peer hostnames to your hosts file (see `backend/README.md`).
-2. Start the backend:
+The backend:
 
-```bash
-cd backend
-npm install
-npm start
+- uploads the file to IPFS
+- generates the file hash
+- stores only the document metadata on the blockchain
+
+Status:
+
+```
+DOCUMENTS_UPLOADED
 ```
 
-3. Run the automated API test (in another terminal):
+---
 
-```bash
-cd backend
-npm run test:api
+## 3. Customs Approval
+
+The Customs Officer reviews the shipment documents.
+
+If approved:
+
+- approval information is recorded on-chain
+- status becomes
+
+```
+CUSTOMS_APPROVED
 ```
 
-Success: final LC status is `PAYMENT_RELEASED` with real IPFS CIDs on the ledger.
+---
 
-See `backend/README.md` for the full REST API reference and curl examples.
+## 4. Bank Approval
 
-### A note on this environment
+The Importer's Bank verifies the shipment documents.
 
-The chaincode's Go syntax was verified here with `gofmt`/`go vet` after
-installing Go via `apt`, and all YAML/shell files were syntax-checked.
-Full dependency resolution (`go mod tidy`), Docker, and the Fabric
-binaries themselves aren't available in this sandbox (network egress is
-restricted and Docker isn't installed), so the network has not actually
-been brought up and tested end-to-end here — that needs to happen on
-your machine using the steps above.
+If approved:
 
-## Chaincode functions
+- approval details are stored on-chain
+- status becomes
 
-| Function | Caller (typical) | Description |
-|---|---|---|
-| `CreateLC` | Bank Officer | Opens a new LC |
-| `GetLC` | anyone | Reads one LC by ID |
-| `GetAllLCs` | anyone | Lists all LCs |
-| `UploadDocument` | Exporter | Records IPFS CID + hash for invoice or bill of lading |
-| `CustomsApproval` | Customs Officer | Marks shipment verified |
-| `BankApproval` | Bank Officer | Marks documents approved |
-| `GetLCHistory` | anyone | Full change history for one LC |
+```
+BANK_APPROVED
+```
 
-`CustomsApproval` and `BankApproval` both require that both documents
-have already been uploaded. Once **both** approvals are in place, the
-chaincode automatically sets `paymentReleased = true` and
-`status = PAYMENT_RELEASED` — no separate transaction needed.
+---
 
-See `docs/SCOPE.md` for the full LC lifecycle and what's intentionally
-out of scope for this MVP.
+## 5. Automatic Payment Release
+
+When both:
+
+- Customs Approval
+- Bank Approval
+
+are completed, the chaincode automatically updates the Letter of Credit to:
+
+```
+PAYMENT_RELEASED
+```
+
+No additional transaction is required for payment release.
+
+---
+
+# Smart Contract (Chaincode)
+
+The business logic is implemented inside Go chaincode.
+
+Implemented functions include:
+
+- CreateLC()
+- GetLC()
+- GetAllLCs()
+- UploadDocument()
+- CustomsApproval()
+- BankApproval()
+- GetLCHistory()
+- GetStatus()
+
+These functions ensure that all participants follow the same business rules.
+
+---
+
+# REST APIs
+
+The Express backend exposes REST APIs for the frontend.
+
+Implemented endpoints include:
+
+```
+POST   /api/lcs
+
+GET    /api/lcs
+
+GET    /api/lcs/:id
+
+POST   /api/lcs/:id/documents
+
+POST   /api/lcs/:id/customs-approval
+
+POST   /api/lcs/:id/bank-approval
+
+GET    /api/lcs/:id/history
+```
+
+The backend communicates with Hyperledger Fabric using the Fabric Gateway SDK.
+
+---
+
+# Why Hyperledger Fabric?
+
+This project uses Hyperledger Fabric because international trade involves known organizations rather than anonymous participants.
+
+Advantages include:
+
+- Permissioned network
+- Identity-based access
+- Shared ledger among trusted organizations
+- Immutable transaction history
+- Fine-grained business logic through chaincode
+- High throughput
+- No cryptocurrency or gas fees
+
+---
+
+# Why IPFS?
+
+Shipment documents can be large.
+
+Instead of storing entire files on the blockchain, this project stores only:
+
+- IPFS Content Identifier (CID)
+- SHA-256 hash
+- Upload metadata
+
+Benefits:
+
+- Smaller blockchain size
+- Faster transactions
+- File integrity verification
+- Distributed document storage
+
+---
+
+# Key Features
+
+- Permissioned blockchain network
+- Digital Letter of Credit workflow
+- Shared ledger for all participants
+- Immutable transaction history
+- IPFS-based document storage
+- Automatic workflow progression
+- REST API integration
+- React dashboard
+- Asset history tracking
+
+---
+
+# Benefits for Cross-Border Trade
+
+This approach improves trade operations by providing:
+
+### Transparency
+
+Every participant sees the same Letter of Credit status.
+
+### Traceability
+
+Every transaction is permanently recorded on the blockchain.
+
+### Data Integrity
+
+Shipment documents can be verified using stored cryptographic hashes.
+
+### Shared Source of Truth
+
+All organizations work from the same ledger rather than maintaining separate records.
+
+### Auditability
+
+Complete transaction history can be retrieved at any time.
+
+### Reduced Manual Coordination
+
+Organizations no longer need to exchange status updates through multiple communication channels.
+
+---
+
+# Current Limitations
+
+This project is an MVP intended to demonstrate blockchain-based trade finance.
+
+The following are not currently implemented:
+
+- Digital signatures
+- Identity-based MSP authorization
+- Multi-organization endorsement policies
+- Automatic customs integration
+- Bank payment integration
+- Real-time shipment tracking
+- Smart document verification
+- Notification services
+
+---
+
+# Future Enhancements
+
+Potential improvements include:
+
+- MSP-based role authorization
+- Integration with real banking systems
+- Digital signature verification
+- Automated customs system integration
+- IoT-based shipment tracking
+- OCR-based document validation
+- Notification services
+- Multi-currency settlement
+- Rich CouchDB queries
+- Pagination and search
+- Kubernetes deployment
+- Monitoring and analytics dashboard
+
+---
+
+# Project Outcome
+
+This project demonstrates how Hyperledger Fabric can digitize a traditional Letter of Credit workflow by combining:
+
+- Permissioned blockchain
+- Smart contracts
+- Distributed file storage
+- REST APIs
+- Modern web technologies
+
+The result is a transparent, traceable, and auditable trade finance system where all participating organizations share a common, immutable view of the transaction lifecycle.
+
+---
